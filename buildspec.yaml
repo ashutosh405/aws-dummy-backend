@@ -1,0 +1,44 @@
+version: 0.2
+
+env:
+  variables:
+    # Set your EKS Cluster Name and Region
+    EKS_CLUSTER_NAME: "plutos-platform-uat-eks-cluster"
+    EKS_REGION: "ap-south-1"
+    REPOSITORY_NAME: "aws-dummy-backend"
+
+phases:
+  install:
+    commands:
+      - echo Installing kubectl...
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - chmod +x ./kubectl
+      - mv ./kubectl /usr/local/bin/kubectl
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - aws ecr get-login-password --region $EKS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$EKS_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$EKS_REGION.amazonaws.com/$REPOSITORY_NAME
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -t ${ECR_REPO_NAME} -f ./Dockerfile .
+      - docker tag ${ECR_REPO_NAME}:latest ${ECR_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${TAG}
+      - export BUILD_SUCCESS="true"
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push ${ECR_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${TAG}
+      - echo Updating Kubeconfig for EKS...
+      - aws eks update-kubeconfig --name $plutos-platform-uat-eks-cluster --region $ap-south-1
+      - echo Deploying to Kubernetes...
+      # This command replaces the image placeholder in your deployment.yaml and applies it
+      - sed -i "s|${ECR_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:latest|${ECR_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${TAG}|g" deployment.yaml
+      - kubectl apply -f deployment.yaml
+      - kubectl apply -f service.yaml
+      - echo Deployment Successful!
