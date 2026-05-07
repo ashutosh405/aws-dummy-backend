@@ -16,7 +16,7 @@ spec:
       containers:
         - name: dummy-backend
           #image: 'asia-south1-docker.pkg.dev/plutos-platform/plateform-dev/cams-backend:latest'
-          image: '061039767119.dkr.ecr.ap-south-1.amazonaws.com/platform-uat-cams-be:latest'  
+          image: '061039767119.dkr.ecr.ap-south-1.amazonaws.com/aws-dummy-backend'  
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
